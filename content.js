@@ -1,25 +1,22 @@
-// AI Overview text patterns for different languages
 const AI_OVERVIEW_PATTERNS = [
-  /übersicht mit ki/i, // de
-  /ai overview/i, // en
-  /prezentare generală generată de ai/i, // ro
-  /AI による概要/, // ja
-  /Обзор от ИИ/, // ru
-  /AI 摘要/, // zh-TW
-  /AI-overzicht/i, // nl
-  /AI-oversigt/i, // da
-  /Vista creada con IA/i, // es
-  /Přehled od AI/i, // cz
-  /Aperçu IA/i, // fr
+  /übersicht mit ki/i,
+  /ai overview/i,
+  /prezentare generală generată de ai/i,
+  /AI による概要/,
+  /Обзор от ИИ/,
+  /AI 摘要/,
+  /AI-overzicht/i,
+  /AI-oversigt/i,
+  /Vista creada con IA/i,
+  /Přehled od AI/i,
+  /Aperçu IA/i,
 ];
 
-// CSS selectors for AI overview containers
 const AI_OVERVIEW_SELECTORS = {
   SEARCH_RESULT_SELECTOR: "div#rso > div",
   ABOVE_SEARCH_RESULTS_SELECTOR: "div#rcnt > div",
 };
 
-// Main DOM selectors
 const DOM_SELECTORS = {
   MAIN_BODY: "div#rcnt",
   MAIN_BODY_MOBILE: "div#center_col",
@@ -30,19 +27,16 @@ const DOM_SELECTORS = {
   THINGS_TO_KNOW: "[data-maindata]",
 };
 
-// CSS values
 const CSS_VALUES = {
   HIDDEN: "none",
   HEADER_PADDING: "12px",
   MAIN_MARGIN: "24px",
 };
 
-// Tab patterns
 const TAB_PATTERNS = {
   AI_MODE: /^AI Mode$/i,
 };
 
-// For each matching heading, check both possible div containers
 function getAiContainerParent(startEl) {
   let el = startEl;
 
@@ -50,12 +44,10 @@ function getAiContainerParent(startEl) {
     const parent = el.parentElement;
 
     if (parent.id === "rso") {
-      //search results container
       return el;
     }
 
     if (parent.id === "rcnt") {
-      //traditional banner container
       return el;
     }
 
@@ -93,25 +85,11 @@ const getAiOverview = (mainBody) => {
     }
   }
 
-  // Specific AI overview language based fallback
-  // const aiTexts = [
-  //   ...mainBody.querySelectorAll("h1, h2, [role='heading']"),
-  // ].filter((e) =>
-  //   AI_OVERVIEW_PATTERNS.some((pattern) => pattern.test(e.innerText)),
-  // );
-
-  // for (const aiText of aiTexts) {
-  //   const block = getAiContainerParent(aiText);
-  //   if (block) {
-  //     return block;
-  //   }
-  // }
-
   return null;
 };
 
 const getThingsToKnow = () => {
-  const thingsToKnow = document.querySelectorAll('[data-maindata]:not([data-bkt])'); //TODO find a more reliable selector to hide things to know. This is at risk of hiding other non-AI features
+  const thingsToKnow = document.querySelectorAll('[data-maindata]:not([data-bkt])');
   for (const el of thingsToKnow) {
     const block = getThingsToKnowContainer(el);
     if (block) {
@@ -125,10 +103,8 @@ const isAiOverviewPaaTab = (el) => {
 
   if (!el || !el.matches("div.related-question-pair")) return false;
 
-  //pre-hydration tag on AI tabs
   if (el.querySelector("[data-evn]")) return true;
 
-  //Post hydration AI tags:
   if (el.querySelector('[data-subtree~="aimc"], [data-subtree="aimc"]')) {
     return true;
   }
@@ -137,7 +113,6 @@ const isAiOverviewPaaTab = (el) => {
     return true;
   }
 
-  // Last-resort fallback once text has rendered
   if (AI_OVERVIEW_PATTERNS.some((pattern) => pattern.test(el.innerText))) {
     return true;
   }
@@ -145,56 +120,89 @@ const isAiOverviewPaaTab = (el) => {
   return false;
 };
 
-const observer = new MutationObserver(() => {
-  // each time there's a mutation in the document see if there's an ai overview to hide
+const originalStyles = new Map();
+let enabled = false;
+
+function applyStyle(element, property, value) {
+  if (!element) return;
+  if (!originalStyles.has(element)) originalStyles.set(element, new Map());
+  const properties = originalStyles.get(element);
+  if (!properties.has(property)) {
+    properties.set(property, {
+      value: element.style.getPropertyValue(property),
+      priority: element.style.getPropertyPriority(property),
+    });
+  }
+  element.style.setProperty(property, value);
+}
+
+function applyBlocking() {
+  if (!enabled) return;
   const mainBody =
     document.querySelector(DOM_SELECTORS.MAIN_BODY) ||
     document.querySelector(DOM_SELECTORS.MAIN_BODY_MOBILE);
 
   const aiOverview = getAiOverview(mainBody);
 
-  // Hide AI overview
-  if (aiOverview) aiOverview.style.display = CSS_VALUES.HIDDEN;
+  applyStyle(aiOverview, "display", CSS_VALUES.HIDDEN);
 
-  // Restore padding after header tabs
   const headerTabs = document.querySelector(DOM_SELECTORS.HEADER_TABS);
-  if (headerTabs) headerTabs.style.paddingBottom = CSS_VALUES.HEADER_PADDING;
+  applyStyle(headerTabs, "padding-bottom", CSS_VALUES.HEADER_PADDING);
 
-  // For debugging
-  // console.log([...mainBody?.querySelectorAll('h1, h2')].map(e => { return { text: e.innerText, obj: e }}));
   const mainElement = document.querySelector(DOM_SELECTORS.MAIN_ELEMENT);
   if (mainElement) {
-    mainElement.style.marginTop = CSS_VALUES.MAIN_MARGIN;
+    applyStyle(mainElement, "margin-top", CSS_VALUES.MAIN_MARGIN);
   }
 
-  // Remove entries in "People also ask" section if it contains "AI overview"
   const peopleAlsoAskAiOverviews = [
     ...document.querySelectorAll(DOM_SELECTORS.PEOPLE_ALSO_ASK),
   ].filter(isAiOverviewPaaTab);
 
-  // peopleAlsoAskAiOverviews.forEach((el) => {
-  //   el.parentElement.parentElement.style.display = CSS_VALUES.HIDDEN;
-  // });
-
-  // Hide Things to Know
   const thingsToKnow = getThingsToKnow();
   if (thingsToKnow) {
-    thingsToKnow.style.display = CSS_VALUES.HIDDEN;
+    applyStyle(thingsToKnow, "display", CSS_VALUES.HIDDEN);
   }
 
-  // Hide AI Mode tab
   const tabsList = document.querySelector(DOM_SELECTORS.TABS_LIST)?.children;
   if (tabsList?.length) {
     const aiModeTab = tabsList[0];
     const text = aiModeTab.innerText.trim();
 
     if (TAB_PATTERNS.AI_MODE.test(text)) {
-      aiModeTab.style.display = CSS_VALUES.HIDDEN;
+      applyStyle(aiModeTab, "display", CSS_VALUES.HIDDEN);
     }
   }
-});
+}
 
-observer.observe(document, {
-  childList: true,
-  subtree: true,
+const observer = new MutationObserver(applyBlocking);
+
+function setEnabled(value) {
+  enabled = value;
+  observer.disconnect();
+  if (enabled) {
+    observer.observe(document, { childList: true, subtree: true });
+    applyBlocking();
+  } else {
+    for (const [element, properties] of originalStyles) {
+      for (const [property, original] of properties) {
+        if (original.value) {
+          element.style.setProperty(property, original.value, original.priority);
+        } else {
+          element.style.removeProperty(property);
+        }
+      }
+    }
+    originalStyles.clear();
+  }
+}
+
+let stateChanged = false;
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes.enabled) {
+    stateChanged = true;
+    setEnabled(changes.enabled.newValue !== false);
+  }
 });
+chrome.storage.local.get("enabled").then(({ enabled = true }) => {
+  if (!stateChanged) setEnabled(enabled);
+}).catch(console.error);
