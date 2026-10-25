@@ -3,6 +3,17 @@
   "name": "Hide Google AI Overviews",
   "version": "1.6.6",
   "description": "Hide annoying Google AI Overviews.",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "AI overviews blocker",
+    "default_icon": {
+      "16": "icons/enabled16.png",
+      "48": "icons/enabled48.png",
+      "128": "icons/enabled128.png"
+    }
+  },
   "permissions": ["scripting", "storage"],
   "icons": {
     "16": "icons/strikeAI16.png",
