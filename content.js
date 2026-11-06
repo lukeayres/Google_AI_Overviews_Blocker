@@ -169,14 +169,18 @@ const hideThingsToKnow = (block) => {
   );
 
   if (aiSections.length === sections.length) {
-    block.style.display = CSS_VALUES.HIDDEN;
+    applyStyle(block, "display", CSS_VALUES.HIDDEN);
     return;
   }
 
   // Re-run on every mutation, so anything hidden before its content loaded is shown again
-  block.style.display = "";
+  restoreStyle(block, "display");
   sections.forEach((section) => {
-    section.style.display = aiSections.includes(section) ? CSS_VALUES.HIDDEN : "";
+    if (aiSections.includes(section)) {
+      applyStyle(section, "display", CSS_VALUES.HIDDEN);
+    } else {
+      restoreStyle(section, "display");
+    }
   });
 };
 
@@ -204,8 +208,37 @@ const getAiModeTabs = () => {
   return [...tabs];
 };
 
-const observer = new MutationObserver(() => {
-  // each time there's a mutation in the document see if there's an ai overview to hide
+const originalStyles = new Map();
+let enabled = false;
+
+function applyStyle(element, property, value) {
+  if (!element) return;
+  if (!originalStyles.has(element)) originalStyles.set(element, new Map());
+  const properties = originalStyles.get(element);
+  if (!properties.has(property)) {
+    properties.set(property, {
+      value: element.style.getPropertyValue(property),
+      priority: element.style.getPropertyPriority(property),
+    });
+  }
+  element.style.setProperty(property, value);
+}
+
+function restoreStyle(element, property) {
+  const properties = originalStyles.get(element);
+  const original = properties?.get(property);
+  if (!original) return;
+  if (original.value) {
+    element.style.setProperty(property, original.value, original.priority);
+  } else {
+    element.style.removeProperty(property);
+  }
+  properties.delete(property);
+  if (!properties.size) originalStyles.delete(element);
+}
+
+function applyBlocking() {
+  if (!enabled) return;
   const mainBody =
     document.querySelector(DOM_SELECTORS.MAIN_BODY) ||
     document.querySelector(DOM_SELECTORS.MAIN_BODY_MOBILE);
@@ -213,25 +246,25 @@ const observer = new MutationObserver(() => {
   const aiOverview = getAiOverview(mainBody);
 
   // Hide AI overview
-  if (aiOverview) aiOverview.style.display = CSS_VALUES.HIDDEN;
+  applyStyle(aiOverview, "display", CSS_VALUES.HIDDEN);
   getAiOverviewTitleBlocks(mainBody).forEach((block) => {
-    block.style.display = CSS_VALUES.HIDDEN;
+    applyStyle(block, "display", CSS_VALUES.HIDDEN);
   });
 
   // Restore padding after header tabs
   const headerTabs = document.querySelector(DOM_SELECTORS.HEADER_TABS);
-  if (headerTabs) headerTabs.style.paddingBottom = CSS_VALUES.HEADER_PADDING;
+  applyStyle(headerTabs, "padding-bottom", CSS_VALUES.HEADER_PADDING);
 
   // For debugging
   // console.log([...mainBody?.querySelectorAll('h1, h2')].map(e => { return { text: e.innerText, obj: e }}));
   const mainElement = document.querySelector(DOM_SELECTORS.MAIN_ELEMENT);
   if (mainElement) {
-    mainElement.style.marginTop = CSS_VALUES.MAIN_MARGIN;
+    applyStyle(mainElement, "margin-top", CSS_VALUES.MAIN_MARGIN);
   }
 
   // Hide "People also ask"; its answers are AI Overviews
   document.querySelectorAll(DOM_SELECTORS.PEOPLE_ALSO_ASK).forEach((el) => {
-    (getResultBlock(el) || el).style.display = CSS_VALUES.HIDDEN;
+    applyStyle(getResultBlock(el) || el, "display", CSS_VALUES.HIDDEN);
   });
 
   // Hide Things to Know
@@ -240,11 +273,39 @@ const observer = new MutationObserver(() => {
 
   // Hide AI Mode tab
   getAiModeTabs().forEach((tab) => {
-    tab.style.display = CSS_VALUES.HIDDEN;
+    applyStyle(tab, "display", CSS_VALUES.HIDDEN);
   });
-});
+}
 
-observer.observe(document, {
-  childList: true,
-  subtree: true,
+const observer = new MutationObserver(applyBlocking);
+
+function setEnabled(value) {
+  enabled = value;
+  observer.disconnect();
+  if (enabled) {
+    observer.observe(document, { childList: true, subtree: true });
+    applyBlocking();
+  } else {
+    for (const [element, properties] of originalStyles) {
+      for (const [property, original] of properties) {
+        if (original.value) {
+          element.style.setProperty(property, original.value, original.priority);
+        } else {
+          element.style.removeProperty(property);
+        }
+      }
+    }
+    originalStyles.clear();
+  }
+}
+
+let stateChanged = false;
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes.enabled) {
+    stateChanged = true;
+    setEnabled(changes.enabled.newValue !== false);
+  }
 });
+chrome.storage.local.get("enabled").then(({ enabled = true }) => {
+  if (!stateChanged) setEnabled(enabled);
+}).catch(console.error);
